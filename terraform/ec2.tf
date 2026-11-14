@@ -1,83 +1,84 @@
-data "aws_ami" "os_image" {
-  owners      = ["099720109477"]
-  most_recent = true
-  filter {
-    name   = "state"
-    values = ["available"]
-  }
-  filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd-gp3/*24.04-amd64*"]
+resource "aws_vpc" "Demo" {
+  cidr_block = var.vpc_cidr_block
+
+  tags = {
+    Name = "vpc-TF"
   }
 }
-resource "aws_default_vpc" "default" {
+resource "aws_subnet" "pub" {
+  vpc_id                  = aws_vpc.Demo.id
+  cidr_block              = var.aws_subnet
+  availability_zone       = var.aws_az[0]
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "Public-subnet"
+  }
+}
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.Demo.id
+  tags = {
+    Name = "igw-var"
+  }
+}
+resource "aws_route_table" "RT-PUB" {
+  vpc_id = aws_vpc.Demo.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+}
+resource "aws_route_table_association" "RT" {
+  subnet_id      = aws_subnet.pub.id
+  route_table_id = aws_route_table.RT-PUB.id
 
 }
+resource "aws_security_group" "var_sg" {
+  name   = "dev-sg"
+  vpc_id = aws_vpc.Demo.id
 
-resource "aws_security_group" "allow_user_to_connect" {
-  name        = "allow TLS"
-  description = "Allow user to connect"
-  vpc_id      = aws_default_vpc.default.id
   ingress {
-    description = "port 22 allow"
-    from_port   = 22
-    to_port     = 22
+    from_port   = var.sg_ports[0]
+    to_port     = var.sg_ports[0]
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
-
+  ingress {
+    from_port   = var.sg_ports[1]
+    to_port     = var.sg_ports[1]
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    from_port   = var.sg_ports[2]
+    to_port     = var.sg_ports[2]
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    from_port   = var.sg_ports[3]
+    to_port     = var.sg_ports[3]
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
   egress {
-    description = " allow all outgoing traffic "
-    from_port   = 0
-    to_port     = 0
+    from_port   = var.sg_ports[4]
+    to_port     = var.sg_ports[4]
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-
-  ingress {
-    description = "port 80 allow"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    description = "port 443 allow"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    description = "port 8080 allow"
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  ingress {
-    description = "port 30000-32767 allow"
-    from_port   = 30000
-    to_port     = 32767
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "mysecurity-group"
-  }
 }
-
 resource "aws_instance" "testinstance" {
-  ami             = data.aws_ami.os_image.id
-  instance_type   = var.instance_type
-  key_name        = var.key_name
-  security_groups = [aws_security_group.allow_user_to_connect.name]
-  user_data       = file("${path.module}/install_tools.sh")
+  ami                    = data.aws_ami.os_image.id
+  instance_type          = var.instance_type
+  subnet_id              = aws_subnet.pub.id
+  key_name               = var.key_name
+  vpc_security_group_ids = [aws_security_group.var_sg.id]
+  user_data              = file("${path.module}/install_tools.sh")
+
   tags = {
-    Name = "Jenkins-Automate"
+    Name        = var.instance_tags.Name,
+    Environment = var.instance_tags_dev.Environment
   }
   root_block_device {
     volume_size = 30
